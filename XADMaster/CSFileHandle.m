@@ -35,7 +35,7 @@ NSString *CSFileErrorException=@"CSFileErrorException";
 	if(!fileh) [NSException raise:CSCannotOpenFileException
 	format:@"Error attempting to open file \"%@\" in mode \"%@\".",path,modes];
 
-	CSFileHandle *handle=[[[CSFileHandle alloc] initWithFilePointer:fileh closeOnDealloc:YES name:path] autorelease];
+	CSFileHandle *handle=[[[CSFileHandle alloc] initWithFilePointer:fileh closeOnDealloc:YES path:path] autorelease];
 	if(handle) return handle;
 
 	fclose(fileh);
@@ -44,25 +44,28 @@ NSString *CSFileErrorException=@"CSFileErrorException";
 
 
 
--(id)initWithFilePointer:(FILE *)file closeOnDealloc:(BOOL)closeondealloc name:(NSString *)descname
+-(id)initWithFilePointer:(FILE *)file closeOnDealloc:(BOOL)closeondealloc path:(NSString *)filepath
 {
-	if((self=[super initWithName:descname]))
+	if(self=[super init])
 	{
 		fh=file;
+		path=[filepath retain];
  		close=closeondealloc;
 		multilock=nil;
-		parent=nil;
+		fhowner=nil;
 	}
 	return self;
 }
 
 -(id)initAsCopyOf:(CSFileHandle *)other
 {
-	if((self=[super initAsCopyOf:other]))
+	if(self=[super initAsCopyOf:other])
 	{
 		fh=other->fh;
+		path=[other->path retain];
  		close=NO;
-		parent=[other retain];
+		if(other->fhowner) fhowner=[other->fhowner retain];
+		else fhowner=[other retain];
 
 		if(!other->multilock) [other _setMultiMode];
 
@@ -76,15 +79,16 @@ NSString *CSFileErrorException=@"CSFileErrorException";
 
 -(void)dealloc
 {
-	if(fh&&close) fclose(fh);
-	[parent release];
+	if(fh && close) fclose(fh);
+	[path release];
+	[fhowner release];
 	[multilock release];
 	[super dealloc];
 }
 
 -(void)close
 {
-	if(fh&&close) fclose(fh);
+	if(fh && close) fclose(fh);
 	fh=NULL;
 }
 
@@ -162,6 +166,11 @@ NSString *CSFileErrorException=@"CSFileErrorException";
 	if(multilock) { pos=ftello(fh); [multilock unlock]; }
 }
 
+-(NSString *)name
+{
+	return path;
+}
+
 
 
 
@@ -169,7 +178,7 @@ NSString *CSFileErrorException=@"CSFileErrorException";
 {
 	if(feof(fh)) [self _raiseEOF];
 	else [[[[NSException alloc] initWithName:CSFileErrorException
-	reason:[NSString stringWithFormat:@"Error while attempting to read file \"%@\": %s.",name,strerror(errno)]
+	reason:[NSString stringWithFormat:@"Error while attempting to read file \"%@\": %s.",[self name],strerror(errno)]
 	userInfo:[NSDictionary dictionaryWithObject:[NSNumber numberWithInt:errno] forKey:@"ErrNo"]] autorelease] raise];
 }
 
